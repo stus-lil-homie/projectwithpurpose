@@ -1,0 +1,157 @@
+from flask import Flask, render_template
+import threading
+import time
+import board
+import neopixel
+
+# Configuration for NeoPixel
+pixel_pin = board.D18  # GPIO pin connected to the NeoPixels
+num_pixels = 60  # Number of NeoPixels
+ORDER = neopixel.RGB  # Color order
+
+# Initialize NeoPixels
+pixels = neopixel.NeoPixel(
+    pixel_pin, num_pixels, brightness=0.2, auto_write=False, pixel_order=ORDER
+)
+
+stop_event = threading.Event()  # Event to signal the effect to stop
+effect_thread = None  # Thread to run the current effect
+
+def wheel(pos):
+    if pos < 0 or pos > 255:
+        return (0, 0, 0)
+    if pos < 85:
+        return (pos * 3, 255 - pos * 3, 0)
+    if pos < 170:
+        pos -= 85
+        return (255 - pos * 3, 0, pos * 3)
+    pos -= 170
+    return (0, pos * 3, 255 - pos * 3)
+
+def rainbow_cycle():
+    while not stop_event.is_set():
+        for j in range(255):
+            if stop_event.is_set():
+                break
+            for i in range(num_pixels):
+                pixel_index = (i * 256 // num_pixels + j) & 255
+                pixels[i] = wheel(pixel_index)
+            pixels.show()
+            time.sleep(0.01)  # Adjust the delay for the desired speed
+            if stop_event.is_set():
+                break
+
+def wave_cycle():
+    while not stop_event.is_set():
+        for l in range(num_pixels):
+            if stop_event.is_set():
+                break
+            pixels[l] = (150,150,150)
+            pixels.show()
+            time.sleep(0.066)
+        for l in range(4):
+            if stop_event.is_set():
+                break
+            pixels[num_pixels-1]=(0,0,0)
+            pixels.show()
+            time.sleep(0.5)
+            pixels[num_pixels-1]=(150,150,150)
+            pixels.show()
+            time.sleep(0.5)
+        for i in range(num_pixels - 1, -1, -1):
+            if stop_event.is_set():
+                break
+            pixels[i] = (0, 0, 0)
+            pixels.show()
+            time.sleep(0.066)
+        for l in range(4):
+            if stop_event.is_set():
+                break
+            pixels[0]=(0,0,0)
+            pixels.show()
+            time.sleep(0.5)
+            pixels[0]=(150,150,150)
+            pixels.show()
+            time.sleep(0.5)
+
+def lights_off():
+    pixels.fill((0, 0, 0))
+    pixels.show()
+
+def fill_cycle():
+    while not stop_event.is_set():
+        for i in range(int(num_pixels / 2)):
+            if stop_event.is_set():
+                break
+            pixels[i] = (150,150,150)
+            pixels[num_pixels - i - 1] = (150,150,150)
+            pixels.show()
+            time.sleep(0.132)
+        for l in range(4):
+            if stop_event.is_set():
+                break
+            pixels[int(num_pixels/2)]=(0,0,0)
+            pixels[int(num_pixels/2)-1]=(0,0,0)
+            pixels.show()
+            time.sleep(0.5)
+            pixels[int(num_pixels/2)]=(150,150,150)
+            pixels[int(num_pixels/2)-1]=(150,150,150)
+            pixels.show()
+            time.sleep(0.5)
+        for i in range(int(num_pixels / 2), -1, -1):
+            if stop_event.is_set():
+                break
+            pixels[i] = (0,0,0)
+            pixels[num_pixels-i-1] = (0,0,0)
+            pixels.show()
+            time.sleep(0.132)
+        for l in range(4):
+            if stop_event.is_set():
+                break
+            pixels[0]=(0,0,0)
+            pixels[num_pixels-1] = (0,0,0)
+            pixels.show()
+            time.sleep(0.5)
+            pixels[0]=(150,150,150)
+            pixels[num_pixels-1] = (150,150,150)
+            pixels.show()
+            time.sleep(0.5)
+
+def start_effect(effect_function):
+    global stop_event, effect_thread
+    stop_event.set()  # Signal the current effect to stop
+    if effect_thread and effect_thread.is_alive():
+        effect_thread.join()  # Wait for the current effect to stop
+    stop_event.clear()  # Clear the stop event for the new effect
+    lights_off()  # Clear any residual colors
+    effect_thread = threading.Thread(target=effect_function)
+    effect_thread.start()
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+@app.route('/rainbow_on')
+def rainbow_on():
+    start_effect(rainbow_cycle)
+    return 'Rainbow cycle started'
+
+@app.route('/turn_off')
+def turn_off():
+    start_effect(lights_off)
+    return 'Lights turned off'
+
+@app.route('/wave_on')
+def wave():
+    start_effect(wave_cycle)
+    return 'Wave effect started'
+
+@app.route('/fill_on')
+def fill():
+    start_effect(fill_cycle)
+    return 'Fill effect started'
+
+if __name__ == '__main__':
+    app.run(host='10.1.15.104', port=5000, debug=True)
